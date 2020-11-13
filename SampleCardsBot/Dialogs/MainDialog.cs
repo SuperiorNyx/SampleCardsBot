@@ -4,8 +4,12 @@ using System.Threading.Tasks;
 using Microsoft.Bot.Builder;
 using Microsoft.Bot.Builder.Dialogs;
 using Microsoft.Bot.Builder.Dialogs.Choices;
+using Microsoft.Bot.Builder.AI.QnA;
+using Microsoft.Bot.Builder.AI.QnA.Dialogs;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Bot.Schema;
 using Microsoft.Extensions.Logging;
+
 
 namespace SampleCardsBot.Dialogs
 {
@@ -13,13 +17,17 @@ namespace SampleCardsBot.Dialogs
     {
 
         protected readonly ILogger _logger;
-        public MainDialog(ILogger<MainDialog> logger)
-            : base(nameof(MainDialog))
+        protected readonly IBotServices _serv;
+        protected readonly IConfiguration _conf;
+        public MainDialog(ILogger<MainDialog> logger, IBotServices services, IConfiguration configuration)
+            : base()
         {
 
             _logger = logger;
+            _serv = services;
+            _conf = configuration;
 
-            // Define the main dialog and its related components.
+            // Define the main dialog and its components.
             AddDialog(new ChoicePrompt(nameof(ChoicePrompt)));
             AddDialog(new WaterfallDialog(nameof(WaterfallDialog), new WaterfallStep[]
             {
@@ -29,6 +37,8 @@ namespace SampleCardsBot.Dialogs
 
             InitialDialogId = nameof(WaterfallDialog);
         }
+
+       
         private async Task<DialogTurnResult> ChooseCardStepAsync(WaterfallStepContext stepContext, CancellationToken cancellationToken)
         {
             _logger.LogInformation("MainDialog.ChoiceCardStepAsync");
@@ -82,6 +92,15 @@ namespace SampleCardsBot.Dialogs
                 case "Mexico City":
                     reply.Attachments.Add(Card.GetMexicoCityCard().ToAttachment());
                     break;
+                case "QnA":
+                    AddDialog(new QnADialog(_serv, _conf));
+
+                    AddDialog(new WaterfallDialog(InitialDialogId)
+                       .AddStep(InitialStepAsync));
+
+                    // The initial child Dialog to run.
+                    InitialDialogId = InitialDialogId;
+                    break;
                 default:
                     reply.AttachmentLayout = AttachmentLayoutTypes.Carousel;
                     reply.Attachments.Add(Card.GetSeattleCard().ToAttachment());
@@ -116,9 +135,15 @@ namespace SampleCardsBot.Dialogs
                 new Choice() { Value = "Johannesburg", Synonyms = new List<string>() { "new york", "6" }},
                 new Choice() { Value = "Beijing", Synonyms = new List<string>() { "new york", "7" }},
                 new Choice() { Value = "Mexico City", Synonyms = new List<string>() { "new york", "8" }},
+                new Choice() { Value = "QnA", Synonyms = new List<string>() {"qna", "9" } },
             };
 
             return cardOptions;
+        }
+
+        private async Task<DialogTurnResult> InitialStepAsync(WaterfallStepContext stepContext, CancellationToken cancellationToken)
+        {
+            return await stepContext.BeginDialogAsync(nameof(QnAMakerDialog), null, cancellationToken);
         }
     }
 }
